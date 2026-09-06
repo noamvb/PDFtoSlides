@@ -31,7 +31,7 @@ const $ = (sel) => /** @type {HTMLElement} */ (document.querySelector(sel));
  * @property {"probing"|"locked"|"ready"|"error"|"converting"|"done"} status
  * @property {string} message          user-facing status text
  * @property {Error|null} lastError
- * @property {number} sampleBytes      measured bytes of one rendered page, 0 = unknown
+ * @property {number[]} sampleBytes    measured bytes of sampled pages, empty = unknown
  * @property {string} sampleKey        settings the sample was measured under
  * @property {string|null} outputName
  */
@@ -64,7 +64,7 @@ async function addFiles(list) {
     const entry = {
       id: uid(), file, pageCount: 0, rangeExpr: "", pages: null, rangeError: "",
       password: null, status: "probing", message: "Reading…", lastError: null,
-      sampleBytes: 0, sampleKey: "", outputName: null,
+      sampleBytes: [], sampleKey: "", outputName: null,
     };
     state.entries.push(entry);
     log.info(`Added ${file.name} (${file.size} bytes)`);
@@ -143,9 +143,13 @@ async function runEstimate() {
     try {
       const doc = await openPdf(await entry.file.arrayBuffer(), entry.password ?? undefined);
       try {
-        const first = entry.pages ? entry.pages[0] : 1;
-        const r = await renderPage(doc, first, renderOpts());
-        entry.sampleBytes = r.blob.size;
+        const samples = [];
+        for (const n of samplePages(entry)) {
+          if (state.converting) break;
+          const r = await renderPage(doc, n, renderOpts());
+          samples.push(r.blob.size);
+        }
+        entry.sampleBytes = samples;
         entry.sampleKey = key;
       } finally {
         await doc.destroy();
@@ -158,6 +162,26 @@ async function runEstimate() {
     renderEstimate();
   }
   renderEstimate();
+}
+
+/**
+ * Pick up to five pages spread evenly through the document to measure.
+ *
+ * Sampling only page 1 was badly wrong on real documents: a 128-page book with
+ * a light cover page estimated 13 MB against an actual 54 MB. Spreading the
+ * samples catches the mix of text pages and scanned spreads.
+ *
+ * @param {Entry} entry
+ * @returns {number[]} 1-based page numbers
+ */
+function samplePages(entry) {
+  const pages = entry.pages ?? Array.from({ length: entry.pageCount }, (_, i) => i + 1);
+  if (pages.length <= 5) return pages;
+  const picks = new Set();
+  for (let i = 0; i < 5; i++) {
+    picks.add(pages[Math.round((i * (pages.length - 1)) / 4)]);
+  }
+  return [...picks];
 }
 
 function renderOpts() {
@@ -174,8 +198,8 @@ function totalEstimate() {
   let bytes = 0;
   let biggest = 0;
   for (const e of state.entries) {
-    if (e.status !== "ready" || !e.sampleBytes) continue;
-    const b = estimatePptxBytes([e.sampleBytes], pagesOf(e));
+    if (e.status !== "ready" || !e.sampleBytes.length) continue;
+    const b = estimatePptxBytes(e.sampleBytes, pagesOf(e));
     bytes += b;
     biggest = Math.max(biggest, b);
   }
@@ -258,12 +282,24 @@ async function convertAll() {
   const cancelled = state.abort.signal.aborted;
   state.converting = false;
   state.abort = null;
-  state.lastRun = cancelled && !result.ok && !result.failed ? null : { ...result, cancelled };
+  state.lastRun = { ...result, cancelled };
   if (cancelled) log.info("Batch cancelled by user");
   render();
 }
 
 function updateProgress(entry, pagesDone, totalPages) {
+  // Keep the file row's own status line in step with the progress bar. render()
+  // is deliberately not called per page — rebuilding the list 166 times would
+  // throw away focus and input state — so this line is updated in place.
+  if (entry) {
+    const row = document.querySelector(`#filelist li[data-id="${entry.id}"] .f-meta`);
+    if (row) {
+      const bits = [formatBytes(entry.file.size)];
+      if (entry.pageCount) bits.push(`${entry.pageCount} page${entry.pageCount === 1 ? "" : "s"}`);
+      if (entry.message) bits.push(entry.message);
+      row.textContent = bits.join(" · ");
+    }
+  }
   const pct = totalPages ? Math.min(100, (pagesDone / totalPages) * 100) : 0;
   $("#bar-fill").style.width = `${pct}%`;
   $("#prog-who").textContent = entry ? entry.file.name : "Finishing…";
@@ -440,6 +476,7 @@ function renderControls() {
     /** @type {HTMLInputElement} */ (el).disabled = state.converting;
   }
   $("#dropzone").classList.toggle("disabled", state.converting);
+  /** @type {HTMLButtonElement} */ ($("#clear-all")).disabled = state.converting;
 }
 
 function renderEstimate() {
@@ -448,7 +485,9 @@ function renderEstimate() {
   if (!bytes) { box.hidden = true; return; }
   box.hidden = false;
   $("#estimate-value").textContent = formatBytes(bytes);
-  const over = biggest > GOOGLE_SLIDES_LIMIT_BYTES * 0.9;
+  // Estimates run ~20% low on image-heavy documents even with five samples,
+  // so warn well before the real limit rather than at 90% of it.
+  const over = biggest > GOOGLE_SLIDES_LIMIT_BYTES * 0.75;
   const warn = $("#size-warning");
   warn.hidden = !over;
   if (over) {

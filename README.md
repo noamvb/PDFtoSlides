@@ -15,8 +15,10 @@ dist/PDFtoSlides.html      ~4.7 MB, works offline, Windows and macOS alike
 
 | | |
 |---|---|
-| ![Empty state](assets/screenshot-empty.png) | ![Converting](assets/screenshot-converting.png) |
-| The drop zone and settings | Per-file progress with cancel |
+| ![The queue, with a locked file and page ranges](assets/screenshot-queue.png) | ![Converting a 166-page PDF in dark mode](assets/screenshot-converting.png) |
+| Three files queued — page ranges, a password prompt, a live size estimate | Converting, in dark mode, with per-page progress and Cancel |
+
+![Empty state](assets/screenshot-empty.png)
 
 ## What it does
 

@@ -5,12 +5,27 @@ import { estimatePptxBytes } from "../core/sizeEstimate.js";
 import { QUALITY_DPI } from "../core/quality.js";
 import { createDeck } from "./pptxBuilder.js";
 import { openPdf, readPageSizes, renderPage } from "./pdfRenderer.js";
+import { convertPdfInWorker, workerSupported } from "./workerClient.js";
+
+let workerDisabled = false;
 
 function throwIfAborted(signal) {
   if (signal?.aborted) throw new PdfError(CODES.CANCELLED, "Conversion cancelled.");
 }
 
 export async function convertPdf(job, opts) {
+  if (!workerDisabled && workerSupported()) {
+    try {
+      return await convertPdfInWorker(job, opts);
+    } catch (cause) {
+      if (!cause?.workerStartup) throw cause;
+      workerDisabled = true;
+    }
+  }
+  return convertPdfOnMainThread(job, opts);
+}
+
+async function convertPdfOnMainThread(job, opts) {
   const { signal, onProgress } = opts;
   throwIfAborted(signal);
   onProgress({ phase: "opening", page: 0, pageCount: 0, estimatedBytes: 0 });

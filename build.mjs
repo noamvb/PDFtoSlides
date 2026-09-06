@@ -52,6 +52,18 @@ async function main() {
     base64Dir(path.join(pdfjsDir, "cmaps"), [".bcmap"]),
   ]);
 
+  const [pdfjsBundle, workerBundle, workerBodyBundle] = await Promise.all([
+    build({ entryPoints: [path.join(pdfjsDir, "build", "pdf.min.mjs")], bundle: true, format: "iife", globalName: "pdfjsLib", minify: true, write: false }),
+    build({ entryPoints: [path.join(pdfjsDir, "build", "pdf.worker.min.mjs")], bundle: true, format: "iife", globalName: "pdfjsWorker", minify: true, write: false }),
+    build({
+      entryPoints: [r("src", "convert", "workerBody.js")], bundle: true, format: "iife", platform: "browser",
+      target: ["chrome110", "firefox115", "safari16"], minify: !dev, sourcemap: dev ? "inline" : false,
+      write: false, legalComments: "none",
+    }),
+  ]);
+  const workerBody = workerBodyBundle.outputFiles[0].text;
+  const workerSource = `self.window=self;self.document={URL:"",baseURI:"",body:{append(){}},createElement:(name)=>name==="canvas"?new OffscreenCanvas(1,1):(()=>{const e={style:{},children:[],setAttribute(){},append(...items){for(const item of items){item.parentNode=e;e.children.push(item)}},remove(){},};return e})(),createElementNS:(ns,name)=>{const e={style:{},children:[],setAttribute(){},append(...items){for(const item of items){item.parentNode=e;e.children.push(item)}},remove(){},};return e;}};${pdfjsBundle.outputFiles[0].text}${workerBundle.outputFiles[0].text}${pptxSrc}${workerBody}`;
+
   // Bundle the app's own modules into one classic script (no import statements
   // survive, so the file works from file:// where module CORS rules bite).
   const bundled = await build({
@@ -71,6 +83,7 @@ async function main() {
 globalThis.__PDFJS_SRC__ = ${safeJson(pdfjsSrc)};
 globalThis.__PDFJS_WORKER_SRC__ = ${safeJson(workerSrc)};
 globalThis.__PPTXGEN_SRC__ = ${safeJson(pptxSrc)};
+globalThis.__CONVERTER_WORKER_SRC__ = ${safeJson(workerSource)};
 globalThis.__STANDARD_FONTS__ = ${safeJson(standardFonts)};
 globalThis.__CMAPS__ = ${safeJson(cmaps)};
 </script>`;
@@ -97,6 +110,7 @@ globalThis.__CMAPS__ = ${safeJson(cmaps)};
   console.log(`  pptxgenjs ${mb(pptxSrc.length)}`);
   console.log(`  standard fonts ${Object.keys(standardFonts).length} files, cmaps ${Object.keys(cmaps).length} files`);
   console.log(`  app ${mb(appJs.length)}`);
+  console.log(`  worker ${mb(Buffer.byteLength(workerSource))} (pdf.js ${mb(Buffer.byteLength(pdfjsBundle.outputFiles[0].text))} + worker ${mb(Buffer.byteLength(workerBundle.outputFiles[0].text))} + body ${mb(Buffer.byteLength(workerBody))})`);
 }
 
 main().catch((err) => {
