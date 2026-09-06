@@ -244,11 +244,13 @@ async function convertAll() {
           jpegQuality: opts.quality,
           signal: state.abort.signal,
           onProgress: (p) => {
+            const isPackaging = p.phase === "packaging";
             entry.message =
               p.phase === "opening" ? "Opening…"
-              : p.phase === "packaging" ? "Saving…"
+              : isPackaging ? "Saving PowerPoint… This can take a moment."
               : `Page ${p.page} of ${p.pageCount}`;
-            updateProgress(entry, pagesDone + (p.phase === "rendering" ? p.page : 0), totalPages);
+            const completed = pagesDone + (p.phase === "rendering" ? p.page : isPackaging ? pagesHere : 0);
+            updateProgress(entry, completed, totalPages, isPackaging);
           },
         },
       );
@@ -275,7 +277,7 @@ async function convertAll() {
       log.error(`Failed converting ${entry.file.name}`, /** @type {Error} */ (err));
     }
     pagesDone += pagesHere;
-    updateProgress(null, pagesDone, totalPages);
+    updateProgress(null, pagesDone, totalPages, false);
     render();
   }
 
@@ -287,7 +289,7 @@ async function convertAll() {
   render();
 }
 
-function updateProgress(entry, pagesDone, totalPages) {
+function updateProgress(entry, pagesDone, totalPages, isPackaging = false) {
   // Keep the file row's own status line in step with the progress bar. render()
   // is deliberately not called per page — rebuilding the list 166 times would
   // throw away focus and input state — so this line is updated in place.
@@ -302,6 +304,7 @@ function updateProgress(entry, pagesDone, totalPages) {
   }
   const pct = totalPages ? Math.min(100, (pagesDone / totalPages) * 100) : 0;
   $("#bar-fill").style.width = `${pct}%`;
+  $(".bar").classList.toggle("saving", isPackaging);
   $("#prog-who").textContent = entry ? entry.file.name : "Finishing…";
   $("#prog-what").textContent = entry ? entry.message : "";
   $("#prog-overall").textContent = `${Math.round(pct)}%`;
@@ -500,6 +503,7 @@ function renderEstimate() {
 
 function renderProgress() {
   $("#progress-card").hidden = !state.converting;
+  if (!state.converting) $(".bar").classList.remove("saving");
 }
 
 function renderResults() {
