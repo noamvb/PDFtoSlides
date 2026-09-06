@@ -1,6 +1,6 @@
 import { CODES, PdfError } from "../core/errors.js";
 import { scaleForDpi } from "../core/quality.js";
-import { getPdfjs, getStandardFontDataFactory } from "./pdfjs.js";
+import { getPdfjs, getStandardFontDataFactory, getCMapReaderFactory } from "./pdfjs.js";
 
 /**
  * Open a PDF. `data` is consumed by pdf.js; callers must pass a fresh copy for
@@ -18,6 +18,11 @@ export async function openPdf(data, password) {
       useSystemFonts: !StandardFontDataFactory,
     };
     if (StandardFontDataFactory) options.StandardFontDataFactory = StandardFontDataFactory;
+    const CMapReaderFactory = getCMapReaderFactory();
+    if (CMapReaderFactory) {
+      options.CMapReaderFactory = CMapReaderFactory;
+      options.cMapPacked = true;
+    }
     return await pdfjs.getDocument(options).promise;
   } catch (cause) {
     if (cause instanceof PdfError) throw cause;

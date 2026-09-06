@@ -470,7 +470,7 @@ function renderResults() {
   if (!run || state.converting) return;
   const ok = run.failed === 0 && !run.cancelled;
   $("#result-head").className = `result-head ${ok ? "ok" : "err"}`;
-  $("#result-icon").replaceChildren(icon(ok ? "check" : "alert").firstChild ?? document.createTextNode(""));
+  $("#result-icon").replaceChildren(icon(ok ? "check" : "alert"));
   $("#result-title").textContent = run.cancelled
     ? "Conversion cancelled"
     : run.failed === 0
@@ -480,6 +480,17 @@ function renderResults() {
     ? `Saved to ${makeOutput(state.dirHandle).label}: ${run.names.join(", ")}`
     : "Nothing was saved.";
   $("#result-path").hidden = !state.dirHandle || !run.ok;
+
+  const failures = state.entries.filter((e) => e.status === "error" && e.lastError);
+  $("#tech-detail").textContent = failures.length
+    ? failures
+        .map((e) => {
+          const err = /** @type {PdfError} */ (e.lastError);
+          const cause = err.cause instanceof Error ? `\n    caused by ${err.cause.name}: ${err.cause.message}` : "";
+          return `${e.file.name}\n  ${err.code ?? err.name}: ${err.message}${cause}`;
+        })
+        .join("\n\n")
+    : "No errors recorded.";
 }
 
 /* ---------------------------------------------------------------- helpers */

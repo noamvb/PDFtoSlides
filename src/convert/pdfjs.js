@@ -75,6 +75,30 @@ export function getStandardFontDataFactory() {
 }
 
 /**
+ * Return the CMap factory for CJK documents, if the CMap assets are embedded.
+ * Without these, text in Chinese/Japanese/Korean PDFs renders blank.
+ * @returns {object|undefined}
+ */
+export function getCMapReaderFactory() {
+  const cmaps = globalThis.__CMAPS__;
+  if (!cmaps || typeof cmaps !== "object" || Object.keys(cmaps).length === 0) {
+    return undefined;
+  }
+  return class CMapReaderFactory {
+    async fetch({ name }) {
+      const encoded = cmaps[`${name}.bcmap`];
+      if (typeof encoded !== "string") {
+        throw new Error(`Missing CMap: ${name}`);
+      }
+      return {
+        cMapData: Uint8Array.from(atob(encoded), (character) => character.charCodeAt(0)),
+        isCompressed: true,
+      };
+    }
+  };
+}
+
+/**
  * Resolve the PptxGenJS constructor from its UMD bundle.
  * @returns {Promise<Function>}
  */
