@@ -1,3 +1,4 @@
+import { statSync, readdirSync } from "node:fs";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
@@ -14,7 +15,38 @@ export function fixture(name) {
   return path.join(FIXTURES, name);
 }
 
+/**
+ * Build dist/PDFtoSlides.html if it is missing or older than any source file.
+ *
+ * Node's test runner runs test FILES in parallel. An unconditional rebuild
+ * here meant one suite rewrote the very file another suite was loading, which
+ * produced an intermittent failure that looked like a product bug. Skipping
+ * the rebuild when the artifact is already current removes the race for the
+ * common case; `npm run test:e2e` additionally pins concurrency to 1.
+ */
 export function ensureBuild() {
+  const target = path.join(REPO, "dist", "PDFtoSlides.html");
+  const sources = [
+    path.join(REPO, "build.mjs"),
+    path.join(REPO, "src"),
+  ];
+  const newestSource = () => {
+    let newest = 0;
+    const walk = (p) => {
+      const st = statSync(p);
+      if (st.isDirectory()) for (const e of readdirSync(p)) walk(path.join(p, e));
+      else newest = Math.max(newest, st.mtimeMs);
+    };
+    for (const s of sources) walk(s);
+    return newest;
+  };
+
+  try {
+    if (statSync(target).mtimeMs >= newestSource()) return;
+  } catch {
+    /* not built yet */
+  }
+
   try {
     execFileSync("node", ["build.mjs"], { cwd: REPO, stdio: "inherit" });
   } catch (error) {
