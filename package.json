@@ -4,9 +4,9 @@
   "description": "Convert PDF pages into a Google Slides-compatible .pptx, entirely in your browser.",
   "scripts": {
     "build": "node build.mjs",
-    "test:unit": "node --test tests/unit/",
-    "test:e2e": "node --test tests/e2e/",
-    "test": "node --test tests/unit/ tests/e2e/",
+    "test:unit": "node --test \"tests/unit/*.test.js\"",
+    "test:e2e": "node --test \"tests/e2e/*.test.js\"",
+    "test": "npm run test:unit && npm run test:e2e",
     "fixtures": "node fixtures/generate.mjs"
   },
   "keywords": [],
