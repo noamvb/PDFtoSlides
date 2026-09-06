@@ -1,0 +1,6 @@
+node_modules/
+dist/
+scratch/
+fixtures/out/
+test-results/
+.aiorch-worktrees/
