@@ -302,6 +302,58 @@ def gen_corrupt():
     print(f"wrote {name}")
 
 
+def gen_embedded_font():
+    """A page whose text uses a genuinely EMBEDDED TrueType font.
+
+    Every other text fixture here uses a base-14 font (Helvetica), which pdf.js
+    draws from its own built-in glyph outlines. That never exercises font
+    loading. An embedded font goes through `document.fonts`, which is where the
+    real-world .notdef-box failure lived, so this fixture is what makes the
+    rendering-fidelity test non-vacuous.
+
+    Vera.ttf ships with reportlab under the Bitstream Vera licence, which
+    permits redistribution.
+    """
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
+    import reportlab
+
+    vera = Path(reportlab.__file__).parent / "fonts" / "Vera.ttf"
+    if not vera.exists():
+        raise SystemExit(f"BLOCKED: reportlab did not ship Vera.ttf at {vera}")
+    pdfmetrics.registerFont(TTFont("Vera", str(vera)))
+
+    name = "embedded-font.pdf"
+    c, file_path = make_canvas(name, A4)
+    c.setFont("Vera", 22)
+    c.drawString(56, A4[1] - 90, "Embedded font fixture")
+    c.setFont("Vera", 13)
+    body = [
+        "This page is set in Bitstream Vera, subset and embedded in the file.",
+        "It exists so a renderer that cannot load embedded fonts is caught:",
+        "such a renderer draws a .notdef box for every glyph on this page.",
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZ abcdefghijklmnopqrstuvwxyz 0123456789",
+        "The quick brown fox jumps over the lazy dog, 1234567890 times.",
+        "Sphinx of black quartz, judge my vow; pack my box with five dozen jugs.",
+        "How razorback jumping frogs can level six piqued gymnasts, quickly.",
+    ]
+    # The page is deliberately dense. A sparse page averages the difference
+    # between real glyphs and .notdef boxes away across acres of white paper,
+    # which is how an earlier version of the fidelity test passed with the bug
+    # reintroduced. Filling the page keeps the signal unambiguous.
+    y = A4[1] - 130
+    i = 0
+    while y > 90:
+        c.drawString(46, y, body[i % len(body)])
+        y -= 16
+        i += 1
+    c.setFont("Vera", 9)
+    c.drawString(56, 60, "page 1 - embedded-font.pdf")
+    c.showPage()
+    c.save()
+    print(f"wrote {name}")
+
+
 def main():
     FIXTURES_DIR.mkdir(parents=True, exist_ok=True)
     gen_single_page()
@@ -317,6 +369,7 @@ def main():
     gen_huge_page()
     gen_encrypted()
     gen_unicode_filename()
+    gen_embedded_font()
     gen_corrupt()
 
 

@@ -62,7 +62,21 @@ async function main() {
     }),
   ]);
   const workerBody = workerBodyBundle.outputFiles[0].text;
-  const workerSource = `self.window=self;self.document={URL:"",baseURI:"",body:{append(){}},createElement:(name)=>name==="canvas"?new OffscreenCanvas(1,1):(()=>{const e={style:{},children:[],setAttribute(){},append(...items){for(const item of items){item.parentNode=e;e.children.push(item)}},remove(){},};return e})(),createElementNS:(ns,name)=>{const e={style:{},children:[],setAttribute(){},append(...items){for(const item of items){item.parentNode=e;e.children.push(item)}},remove(){},};return e;}};${pdfjsBundle.outputFiles[0].text}${workerBundle.outputFiles[0].text}${pptxSrc}${workerBody}`;
+  // The worker needs the font and CMap assets too. Without them pdf.js has
+  // nothing to draw a non-embedded font with and emits .notdef boxes for
+  // every glyph, which is how the first real-world document came out.
+  const workerAssets =
+    `globalThis.__STANDARD_FONTS__=${safeJson(standardFonts)};` +
+    `globalThis.__CMAPS__=${safeJson(cmaps)};`;
+  const workerShim = await fs.readFile(r("src", "convert", "workerShim.js"), "utf8");
+  const workerSource = [
+    workerAssets,
+    workerShim,
+    pdfjsBundle.outputFiles[0].text,
+    workerBundle.outputFiles[0].text,
+    pptxSrc,
+    workerBody,
+  ].join("\n;\n");
 
   // Bundle the app's own modules into one classic script (no import statements
   // survive, so the file works from file:// where module CORS rules bite).

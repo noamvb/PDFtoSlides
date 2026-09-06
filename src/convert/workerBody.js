@@ -67,6 +67,50 @@ async function createDeck(slideSize, title) {
   };
 }
 
+/**
+ * Build the pdf.js getDocument parameters, wiring the embedded font assets.
+ *
+ * A worker has no system fonts, so `useSystemFonts: true` leaves pdf.js with
+ * nothing to draw a non-embedded font with and it renders .notdef boxes for
+ * every glyph. The standard fonts and CMaps are inlined into this worker's
+ * source by build.mjs and handed over here.
+ *
+ * @param {ArrayBuffer} bytes
+ * @param {string} [password]
+ */
+function documentParams(bytes, password) {
+  const fonts = globalThis.__STANDARD_FONTS__;
+  const cmaps = globalThis.__CMAPS__;
+  const hasFonts = fonts && typeof fonts === "object" && Object.keys(fonts).length > 0;
+  const hasCmaps = cmaps && typeof cmaps === "object" && Object.keys(cmaps).length > 0;
+
+  const params = { data: bytes, password, useSystemFonts: !hasFonts };
+
+  if (hasFonts) {
+    params.StandardFontDataFactory = class StandardFontDataFactory {
+      async fetch({ filename }) {
+        const encoded = fonts[filename];
+        if (typeof encoded !== "string") throw new Error(`Missing standard font: ${filename}`);
+        return Uint8Array.from(atob(encoded), (c) => c.charCodeAt(0));
+      }
+    };
+  }
+  if (hasCmaps) {
+    params.cMapPacked = true;
+    params.CMapReaderFactory = class CMapReaderFactory {
+      async fetch({ name }) {
+        const encoded = cmaps[`${name}.bcmap`];
+        if (typeof encoded !== "string") throw new Error(`Missing CMap: ${name}`);
+        return {
+          cMapData: Uint8Array.from(atob(encoded), (c) => c.charCodeAt(0)),
+          isCompressed: true,
+        };
+      }
+    };
+  }
+  return params;
+}
+
 async function convert(message) {
   const { id, bytes, password, pages, dpi, mime, quality, title } = message;
   if (checkCancelled(id)) return;
@@ -74,7 +118,7 @@ async function convert(message) {
 
   let doc;
   try {
-    doc = await self.pdfjsLib.getDocument({ data: bytes, password, useSystemFonts: true }).promise;
+    doc = await self.pdfjsLib.getDocument(documentParams(bytes, password)).promise;
     if (checkCancelled(id)) return;
     const sizes = [];
     for (let pageNumber = 1; pageNumber <= doc.numPages; pageNumber += 1) {
