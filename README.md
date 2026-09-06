@@ -165,6 +165,12 @@ download flow. Chrome asks once per batch for permission to save multiple files.
 - **A tab has finite memory.** Pages are rendered and released one at a time, so
   a several-hundred-page document works, but an enormous one may still exhaust
   a 32-bit browser process.
+- **Fonts are checked by rendering, not by structure.** Slide counts and page
+  dimensions can all be correct while every glyph is a `.notdef` box, which is
+  how a real document once came out of this app. `tests/e2e/fidelity.test.js`
+  compares the worker and main-thread renders pixel by pixel against
+  `embedded-font.pdf` to catch that class of failure; the base-14 fixtures
+  cannot, because pdf.js draws those from built-in outlines.
 - **Non-embedded exotic fonts** fall back to the pdf.js standard font set. The
   16 standard PostScript fonts are embedded; anything else relies on the PDF
   embedding its own fonts, which almost all do.
