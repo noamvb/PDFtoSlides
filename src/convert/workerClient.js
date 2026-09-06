@@ -25,6 +25,14 @@ function getWorker() {
     const source = globalThis.__CONVERTER_WORKER_SRC__;
     if (typeof source !== "string") throw new Error("Missing __CONVERTER_WORKER_SRC__ converter asset.");
     worker = new Worker(URL.createObjectURL(new Blob([source], { type: "text/javascript" })));
+    // Hand over the font and CMap assets once per session. Without them pdf.js
+    // has nothing to draw a non-embedded font with; the embedded-font path
+    // additionally needs document.fonts, which the worker shim provides.
+    worker.postMessage({
+      type: "assets",
+      standardFonts: globalThis.__STANDARD_FONTS__ ?? null,
+      cmaps: globalThis.__CMAPS__ ?? null,
+    });
   } catch (cause) {
     worker = undefined;
     throw new WorkerStartupError(cause);

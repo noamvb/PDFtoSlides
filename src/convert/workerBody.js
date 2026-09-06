@@ -210,5 +210,13 @@ self.onmessage = (event) => {
     cancelled.add(message.id);
     return;
   }
+  if (message?.type === "assets") {
+    // Sent once when the worker is spawned, so the ~2.6 MB of font and CMap
+    // data lives in the page rather than being duplicated into this worker's
+    // own source.
+    globalThis.__STANDARD_FONTS__ = message.standardFonts ?? undefined;
+    globalThis.__CMAPS__ = message.cmaps ?? undefined;
+    return;
+  }
   if (message?.type === "convert") void convert(message);
 };

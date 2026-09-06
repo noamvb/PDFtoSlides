@@ -62,15 +62,11 @@ async function main() {
     }),
   ]);
   const workerBody = workerBodyBundle.outputFiles[0].text;
-  // The worker needs the font and CMap assets too. Without them pdf.js has
-  // nothing to draw a non-embedded font with and emits .notdef boxes for
-  // every glyph, which is how the first real-world document came out.
-  const workerAssets =
-    `globalThis.__STANDARD_FONTS__=${safeJson(standardFonts)};` +
-    `globalThis.__CMAPS__=${safeJson(cmaps)};`;
+  // The font and CMap assets are NOT baked into the worker source: they are
+  // ~2.6 MB and the page already carries a copy for the main-thread fallback.
+  // workerClient hands them over in the init message instead.
   const workerShim = await fs.readFile(r("src", "convert", "workerShim.js"), "utf8");
   const workerSource = [
-    workerAssets,
     workerShim,
     pdfjsBundle.outputFiles[0].text,
     workerBundle.outputFiles[0].text,
